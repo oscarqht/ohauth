@@ -11,6 +11,54 @@ export function getProviderTokenStorageKey(providerId: string) {
   return `oh-auth:provider-tokens:${providerId}`;
 }
 
+export function isAllowedRedirectOrigin(originOrUrl: string): boolean {
+  try {
+    const parsed = new URL(originOrUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return false;
+    }
+    const hostname = parsed.hostname.toLowerCase();
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname.startsWith('192.168.') ||
+      hostname.startsWith('10.') ||
+      hostname.endsWith('.local') ||
+      hostname === 'arcable.dev' ||
+      hostname.endsWith('.arcable.dev') ||
+      hostname === 'vercel.app' ||
+      hostname.endsWith('.vercel.app')
+    ) {
+      return true;
+    }
+
+    const extraAllowed =
+      process.env.ALLOWED_REDIRECT_ORIGINS?.split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean) || [];
+    if (
+      extraAllowed.includes(parsed.origin.toLowerCase()) ||
+      extraAllowed.includes(hostname)
+    ) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export function isExternalRedirectUrl(urlStr: string): boolean {
+  try {
+    const parsed = new URL(urlStr);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function sanitizeWebRedirectTarget(
   value: unknown,
 ): string | null {
@@ -19,16 +67,30 @@ export function sanitizeWebRedirectTarget(
   }
 
   const trimmed = value.trim();
-  if (!trimmed.startsWith('/')) {
-    return null;
-  }
-
   if (trimmed.startsWith('//')) {
     return null;
   }
 
-  return trimmed;
+  if (trimmed.startsWith('/')) {
+    return trimmed;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return null;
+    }
+    if (isAllowedRedirectOrigin(url.origin)) {
+      return trimmed;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
+
+
 
 export function toStoredProviderTokens(
   providerId: string,

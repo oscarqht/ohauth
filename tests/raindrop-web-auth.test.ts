@@ -4,6 +4,8 @@ import {
   areStoredProviderTokensEqual,
   buildWebOauthStorageScript,
   getProviderTokenStorageKey,
+  isAllowedRedirectOrigin,
+  isExternalRedirectUrl,
   sanitizeWebRedirectTarget,
   toStoredProviderTokens,
 } from '../src/lib/raindrop-web-auth';
@@ -17,13 +19,34 @@ describe('sanitizeWebRedirectTarget', () => {
     );
   });
 
+  it('accepts allowed external origins', () => {
+    assert.equal(
+      sanitizeWebRedirectTarget('http://localhost:3000/'),
+      'http://localhost:3000/',
+    );
+    assert.equal(
+      sanitizeWebRedirectTarget('http://127.0.0.1:5173/auth/callback'),
+      'http://127.0.0.1:5173/auth/callback',
+    );
+    assert.equal(
+      sanitizeWebRedirectTarget('https://arcable.dev/'),
+      'https://arcable.dev/',
+    );
+    assert.equal(
+      sanitizeWebRedirectTarget('https://arcable.vercel.app/'),
+      'https://arcable.vercel.app/',
+    );
+  });
+
   it('rejects external or malformed redirect targets', () => {
     assert.equal(sanitizeWebRedirectTarget('https://example.com'), null);
     assert.equal(sanitizeWebRedirectTarget('//example.com'), null);
     assert.equal(sanitizeWebRedirectTarget('raindrop'), null);
     assert.equal(sanitizeWebRedirectTarget(undefined), null);
+    assert.equal(sanitizeWebRedirectTarget('javascript:alert(1)'), null);
   });
 });
+
 
 describe('toStoredProviderTokens', () => {
   it('normalizes token payloads into stored web tokens', () => {
