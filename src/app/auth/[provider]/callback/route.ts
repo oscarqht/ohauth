@@ -7,6 +7,7 @@ import {
 } from '@/lib/oauth';
 import {
   buildWebOauthStorageScript,
+  isExternalRedirectUrl,
   sanitizeWebRedirectTarget,
 } from '@/lib/raindrop-web-auth';
 
@@ -319,6 +320,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
     console.error(
       `[callback] Provider returned an error for ${provider.id}: ${providerError}`,
     );
+    if (state.webRedirectTo && isExternalRedirectUrl(state.webRedirectTo)) {
+      const target = new URL(state.webRedirectTo);
+      target.searchParams.set('error', providerError);
+      return NextResponse.redirect(target.toString());
+    }
     const isDev = process.env.NODE_ENV !== 'production';
     return renderCardPage(
       'Authorization failed',
@@ -334,6 +340,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   if (!code) {
     console.error(`[callback] Missing authorization code for ${provider.id}`);
+    if (state.webRedirectTo && isExternalRedirectUrl(state.webRedirectTo)) {
+      const target = new URL(state.webRedirectTo);
+      target.searchParams.set('error', 'Missing authorization code');
+      return NextResponse.redirect(target.toString());
+    }
     const isDev = process.env.NODE_ENV !== 'production';
     return renderCardPage(
       'Missing authorization code',
@@ -377,6 +388,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
         `[callback] Token exchange returned an error payload for ${provider.id}`,
         tokens,
       );
+      if (state.webRedirectTo && isExternalRedirectUrl(state.webRedirectTo)) {
+        const target = new URL(state.webRedirectTo);
+        target.searchParams.set('error', message);
+        return NextResponse.redirect(target.toString());
+      }
       const isDev = process.env.NODE_ENV !== 'production';
       return renderCardPage('Token exchange failed', message, {
         status: tokenStatus ?? 400,
@@ -389,6 +405,33 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const extensionId = state.extensionId;
     if (!extensionId) {
       if (state.webRedirectTo) {
+        if (isExternalRedirectUrl(state.webRedirectTo)) {
+          const target = new URL(state.webRedirectTo);
+          const tokenPayloadObj =
+            tokens && typeof tokens === 'object'
+              ? (tokens as Record<string, unknown>)
+              : {};
+          if (tokenPayloadObj.access_token) {
+            target.searchParams.set(
+              'access_token',
+              String(tokenPayloadObj.access_token),
+            );
+          }
+          if (tokenPayloadObj.refresh_token) {
+            target.searchParams.set(
+              'refresh_token',
+              String(tokenPayloadObj.refresh_token),
+            );
+          }
+          if (tokenPayloadObj.expires_in) {
+            target.searchParams.set(
+              'expires_in',
+              String(tokenPayloadObj.expires_in),
+            );
+          }
+          return NextResponse.redirect(target.toString());
+        }
+
         const script = buildWebOauthStorageScript(
           provider.id,
           tokens,
@@ -460,6 +503,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
     );
   } catch (error) {
     console.error(`[callback] Token exchange failed for ${provider.id}`, error);
+    if (state.webRedirectTo && isExternalRedirectUrl(state.webRedirectTo)) {
+      const target = new URL(state.webRedirectTo);
+      target.searchParams.set(
+        'error',
+        'An error occurred while exchanging the authorization code for tokens.',
+      );
+      return NextResponse.redirect(target.toString());
+    }
     const isDev = process.env.NODE_ENV !== 'production';
     return renderCardPage(
       'Token exchange failed',
